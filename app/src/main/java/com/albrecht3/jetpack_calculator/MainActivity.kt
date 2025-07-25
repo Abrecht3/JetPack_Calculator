@@ -4,15 +4,18 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -22,27 +25,30 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MaterialTheme.colorScheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.albrecht3.jetpack_calculator.buttonclass.CalculatorButton
 import com.albrecht3.jetpack_calculator.buttonclass.CalculatorButtonType
 import com.albrecht3.jetpack_calculator.ui.theme.Cyan
-import com.albrecht3.jetpack_calculator.ui.theme.DarkWhite
 import com.albrecht3.jetpack_calculator.ui.theme.Jetpack_CalculatorTheme
 import com.albrecht3.jetpack_calculator.ui.theme.Red
 
+
 class MainActivity : ComponentActivity() {
+
+    private val viewModel: AppViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -76,25 +82,97 @@ class MainActivity : ComponentActivity() {
                             CalculatorButton("=", CalculatorButtonType.Action),
                         )
                     }
+                    val (uiText, setUiText) = remember {
+                        mutableStateOf("0")
+                    }
+                    LaunchedEffect(uiText) {
+                        if (uiText.startsWith("0") && uiText != "0") {
+                            setUiText(uiText.substring(1))
+                        }
+                    }
+                    val (input, setInput) = remember {
+                        mutableStateOf<String?>(null)
+                    }
                     Box(
                         modifier = Modifier
                             .fillMaxSize(),
                         contentAlignment = Alignment.BottomCenter
                     ) {
-                        LazyVerticalGrid(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
-                                .background(colorScheme.primary)
-                                .padding(8.dp),
-                            columns = GridCells.Fixed(4),
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                            contentPadding = PaddingValues(10.dp)
-                        ) {
-                            items(calculatorButtons) {
-                                Keyboard(button = it, onClick = {})
+                        Column {
+                            Text(
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                                text = "Result here",
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colorScheme.onTertiary
+                            )
+                            Spacer(modifier = Modifier.height(32.dp))
+
+                            LazyVerticalGrid(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
+                                    .background(colorScheme.primary)
+                                    .padding(8.dp),
+                                columns = GridCells.Fixed(4),
+                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                contentPadding = PaddingValues(10.dp)
+                            ) {
+                                items(calculatorButtons) {
+                                    Keyboard(button = it, onClick = {
+                                        when (it.type) {
+                                            CalculatorButtonType.Normal -> {
+                                                runCatching {
+                                                    setUiText(uiText.toInt().toString() + it.text)
+                                                }.onFailure { throwable -> setUiText(uiText + it.text) }
+                                                setInput((input ?: "") + it.text)
+                                                if (viewModel.action.value.isNotEmpty()) {
+                                                    if (viewModel.secondNumber.value == null) {
+                                                        viewModel.setSecondNumber(it.text!!.toDouble())
+                                                    } else {
+                                                        if (viewModel.secondNumber.value.toString().split(".")[1]=="0"){
+                                                            viewModel.setSecondNumber((viewModel.secondNumber.value.toString().split(".").first() + it.text!!).toDouble())
+                                                        }else{
+                                                            viewModel.setSecondNumber((viewModel.secondNumber.value.toString() + it.text!!).toDouble())
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            CalculatorButtonType.Action -> {
+                                                if (it.text == "=") {
+                                                    val result = viewModel.getResult()
+                                                    setUiText(result.toString())
+                                                    setInput(null)
+                                                    viewModel.resetAll()
+                                                } else {
+                                                    runCatching {
+                                                        setUiText(
+                                                            uiText.toInt().toString() + it.text
+                                                        )
+                                                    }.onFailure { throwable -> setUiText(uiText + it.text) }
+                                                    if (input != null) {
+                                                        if (viewModel.firstNumber.value == null) {
+                                                            viewModel.setFirstNumber(input.toDouble())
+                                                        } else {
+                                                            viewModel.setSecondNumber(input.toDouble())
+                                                        }
+                                                        viewModel.setAction(it.text!!)
+                                                    }
+                                                }
+                                            }
+
+                                            CalculatorButtonType.Reset -> {
+                                                setUiText("")
+                                                setInput(null)
+                                                viewModel.resetAll()
+                                            }
+                                        }
+                                    })
+                                }
                             }
                         }
+
                     }
                 }
             }
